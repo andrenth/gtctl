@@ -1,0 +1,27 @@
+[package]
+name = "gtctl"
+version = "0.1.0"
+authors = ["Andre Nathan <andre@digirati.com.br>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1"
+byteorder = "1"
+clap = "3.0.0-beta.1"
+drib = { path = "../drib" }
+env_logger = "0.7"
+futures = "0.3"
+ipnet = { version = "2.3", features = ["serde"] }
+iprange = "0.6"
+lazy_static = "1"
+log = "0.4"
+regex = "1"
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.8"
+tera = { version = "1", default-features = false }
+tokio = { version = "0.2", features = ["full"] }
+
+[dev-dependencies]
+tempdir = "0.3"
