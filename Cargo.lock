@@ -249,6 +249,7 @@ dependencies = [
 [[package]]
 name = "drib"
 version = "0.1.0"
+source = "git+https://github.com/andrenth/drib#b31e2840bf217d706345faa872abac341527c3e8"
 dependencies = [
  "anyhow",
  "bincode",
