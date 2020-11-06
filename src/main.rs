@@ -4,9 +4,10 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
-use clap::{crate_name, crate_version, Clap};
+use clap::{crate_name, crate_version, ArgGroup, Clap};
 use drib::aggregate::{self, Entry};
 use drib::config::Templates;
+use drib::net::Net;
 use drib::output::{self, Bootstrap, Changes, Diff};
 use futures::stream;
 use ipnet::{Ipv4Net, Ipv6Net};
@@ -14,7 +15,10 @@ use log::{debug, info, warn, Level};
 use serde::Serialize;
 use tokio::signal::unix::{signal, SignalKind};
 use tokio::stream::StreamExt;
-use tokio::{fs, io};
+use tokio::{
+    fs::{self, File},
+    io::{self, AsyncBufReadExt, BufReader},
+};
 
 use gtctl::{
     config::{Config, LuaFunctions},
@@ -29,6 +33,18 @@ const OLD_AGGREGATE: &'static str = "aggreate.old";
 #[derive(Debug, Clap)]
 #[clap(name = crate_name!(), version = crate_version!())]
 struct Opts {
+    #[clap(subcommand)]
+    command: Cmd,
+}
+
+#[derive(Debug, Clone, Clap)]
+enum Cmd {
+    Dyncfg(Dyncfg),
+    Estimate(Estimate),
+}
+
+#[derive(Debug, Clone, Clap)]
+struct Dyncfg {
     #[clap(
         short,
         long,
@@ -41,6 +57,27 @@ struct Opts {
     aggregate: PathBuf,
 }
 
+#[derive(Debug, Clone, Clap)]
+#[clap(group = ArgGroup::new("estimate").required(true).multiple(true))]
+struct Estimate {
+    #[clap(
+        short = "4",
+        long,
+        name = "IPV4-PREFIXES",
+        parse(from_os_str),
+        group = "estimate"
+    )]
+    ipv4_prefixes: Option<PathBuf>,
+    #[clap(
+        short = "6",
+        long,
+        name = "IPV6-PREFIXES",
+        parse(from_os_str),
+        group = "estimate"
+    )]
+    ipv6_prefixes: Option<PathBuf>,
+}
+
 #[derive(Debug, Eq, PartialEq)]
 enum Mode {
     Replace,
@@ -50,21 +87,35 @@ enum Mode {
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let opts = Opts::parse();
-    let config = load_config(&opts.config)?;
 
-    setup_logger(&config.log_level);
-    ignore_signals().await?;
-
-    // Current path already exists: must be
-    // a remain from an interrupted execution.
-    // Run the diff to the previous version.
-    let cur_path = config.state_dir.join(CUR_AGGREGATE);
-    if Path::new(&cur_path).exists() {
-        warn!("found preexisting current aggregate file; processing");
-        work(&cur_path, &config).await?;
+    match opts.command {
+        Cmd::Dyncfg(flags) => {
+            let config = load_config(&flags.config)?;
+            setup_logger(&config.log_level);
+            ignore_signals().await?;
+            // Current path already exists: must be
+            // a remain from an interrupted execution.
+            // Run the diff to the previous version.
+            let cur_path = config.state_dir.join(CUR_AGGREGATE);
+            if Path::new(&cur_path).exists() {
+                warn!("found preexisting current aggregate file; processing");
+                dyn_cfg(&cur_path, &config).await?;
+            }
+            dyn_cfg(&flags.aggregate, &config).await?;
+        }
+        Cmd::Estimate(flags) => {
+            if let Some(path) = flags.ipv4_prefixes {
+                let prefixes: BTreeSet<Ipv4Net> = load_prefixes(&path).await?;
+                let params = params::estimate_ipv4(&prefixes);
+                println!("ipv4: {}", params);
+            }
+            if let Some(path) = flags.ipv6_prefixes {
+                let prefixes: BTreeSet<Ipv6Net> = load_prefixes(&path).await?;
+                let params = params::estimate_ipv6(&prefixes);
+                println!("ipv6: {}", params);
+            }
+        }
     }
-
-    work(&opts.aggregate, &config).await?;
 
     Ok(())
 }
@@ -101,7 +152,7 @@ fn load_config(path: impl AsRef<Path>) -> Result<Config, anyhow::Error> {
     Ok(config)
 }
 
-async fn work(new_path: impl AsRef<Path>, config: &Config) -> Result<(), anyhow::Error> {
+async fn dyn_cfg(new_path: impl AsRef<Path>, config: &Config) -> Result<(), anyhow::Error> {
     let cur_path = config.state_dir.join(CUR_AGGREGATE);
 
     fs::copy(&new_path, &cur_path).await.with_context(|| {
@@ -212,11 +263,11 @@ async fn run<'changes, 'ranges: 'changes, T>(
     kind: &Option<String>,
     new_ranges: &'ranges BTreeSet<&Entry<T>>,
     old_ranges: &'ranges BTreeSet<&Entry<T>>,
-    estimate: impl Fn(&BTreeSet<&Entry<T>>) -> Params<T>,
+    estimate: impl Fn(&BTreeSet<T>) -> Params<T>,
     make_diff: impl Fn(Changes<'changes, T>) -> Diff<'changes>,
 ) -> Result<(), anyhow::Error>
 where
-    T: Ord + Serialize,
+    T: Ord + Serialize + Copy,
 {
     let table = replace_vars(&config.lpm.table_format, proto, kind);
     let vars = ParametersScriptVariables {
@@ -243,7 +294,8 @@ where
             )
         })?;
 
-    let estimated_params = estimate(&new_ranges);
+    let set = new_ranges.iter().map(|e| e.range).collect();
+    let estimated_params = estimate(&set);
 
     let scripts = match run_mode(&current_params, &estimated_params) {
         Mode::Replace => {
@@ -354,6 +406,19 @@ fn setup_logger(level: &Level) {
     builder.filter_module("gtctl", level.to_level_filter());
 
     builder.init();
+}
+
+async fn load_prefixes<T: Net>(path: impl AsRef<Path>) -> Result<BTreeSet<T>, anyhow::Error> {
+    let file = File::open(path).await?;
+    let reader = BufReader::new(file);
+    let mut prefixes = BTreeSet::new();
+    let mut lines = reader.lines();
+
+    while let Some(line) = lines.next_line().await? {
+        let prefix = line.parse()?;
+        prefixes.insert(prefix);
+    }
+    Ok(prefixes)
 }
 
 #[cfg(test)]

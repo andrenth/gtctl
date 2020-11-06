@@ -9,7 +9,7 @@ use regex::Regex;
 use serde::Serialize;
 use tokio::io;
 
-use drib::aggregate::{AggregateLoadError, Entry};
+use drib::aggregate::AggregateLoadError;
 use ipnet::{Ipv4Net, Ipv6Net};
 use serde::de::DeserializeOwned;
 
@@ -34,18 +34,19 @@ impl<T> Params<T> {
 
 impl<T> fmt::Display for Params<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "({}, {})", self.num_rules, self.num_tbl8s)
+        write!(f, "rules={}, tbl8s={}", self.num_rules, self.num_tbl8s)
     }
 }
-pub fn estimate_ipv4(entries: &BTreeSet<&Entry<Ipv4Net>>) -> Params<Ipv4Net> {
-    estimate_params(entries, lpm_add_tables)
+
+pub fn estimate_ipv4(nets: &BTreeSet<Ipv4Net>) -> Params<Ipv4Net> {
+    estimate_params(nets, lpm_add_tables)
 }
 
-pub fn estimate_ipv6(entries: &BTreeSet<&Entry<Ipv6Net>>) -> Params<Ipv6Net> {
-    estimate_params(entries, lpm6_add_tables)
+pub fn estimate_ipv6(nets: &BTreeSet<Ipv6Net>) -> Params<Ipv6Net> {
+    estimate_params(nets, lpm6_add_tables)
 }
 
-fn estimate_params<T, F>(entries: &BTreeSet<&Entry<T>>, f: F) -> Params<T>
+fn estimate_params<T, F>(nets: &BTreeSet<T>, f: F) -> Params<T>
 where
     T: Ord + DeserializeOwned,
     F: Fn(&T, &mut HashSet<T>) -> usize,
@@ -54,9 +55,9 @@ where
     let mut num_tbl8s = 0;
     let mut prefixes = HashSet::new();
 
-    for entry in entries {
+    for net in nets {
         num_rules += 1;
-        num_tbl8s += f(&entry.range, &mut prefixes);
+        num_tbl8s += f(&net, &mut prefixes);
     }
 
     Params::new(num_rules, num_tbl8s)
