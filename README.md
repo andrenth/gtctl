@@ -79,7 +79,11 @@ Valid values are `error`, `warn`, `info`, `debug` or `trace` (defaults to `info`
 
 #### `state_dir`
 
-The directory where gtctl stores Drib aggregates across executions.
+The directory where gtctl stores Drib aggregates across executions, as well as rendered policy scripts.
+
+#### `remove_rendered_scripts`
+
+A boolean value that indicates whether the policy scripts generated in `state_dir` are to be removed once they are submitted to Grantor via dynamic configuration.
 
 #### `replace`
 
