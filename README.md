@@ -52,8 +52,8 @@ These can be generated directly from a router's routing table.
 For example, if using the [Bird](https://bird.network.cz/) routing daemon, these files can be generated with commands similar to the ones below.
 
 ```sh
-$ bird show route table my_ipv4_table | grep / | awk '{print $1}' > ipv4-ranges
-$ bird show route table my_ipv6_table | grep / | awk '{print $1}' > ipv6-ranges
+$ birdc show route table my_ipv4_table | grep / | awk '{print $1}' > ipv4-ranges
+$ birdc show route table my_ipv6_table | grep / | awk '{print $1}' > ipv6-ranges
 ```
 
 The commands above will read the default configuration file, `/etc/gtctl/gtctl.yaml`.
