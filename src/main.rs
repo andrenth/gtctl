@@ -27,8 +27,8 @@ use gtctl::{
     util::safe_write,
 };
 
-const CUR_AGGREGATE: &'static str = "aggreate.cur";
-const OLD_AGGREGATE: &'static str = "aggreate.old";
+const CUR_AGGREGATE: &'static str = "aggregate.cur";
+const OLD_AGGREGATE: &'static str = "aggregate.old";
 
 #[derive(Debug, Clap)]
 #[clap(name = crate_name!(), version = crate_version!())]
