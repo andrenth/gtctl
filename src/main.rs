@@ -256,6 +256,11 @@ struct ReplaceModeVariables<'a, T> {
     lpm_table_constructor: &'a str,
 }
 
+#[derive(Debug, Serialize)]
+struct UpdateModeVariables<'a> {
+    lpm_table: &'a str,
+}
+
 async fn run<'changes, 'ranges: 'changes, T>(
     config: &Config,
     lua_functions: &LuaFunctions,
@@ -334,13 +339,15 @@ where
                 remove: remove.into_iter().collect(),
             };
             let diff = make_diff(changes);
+            let vars = UpdateModeVariables { lpm_table: &table };
             let mut update = config.update.clone();
             update.templates.output = replace_vars(&config.update.templates.output, proto, kind);
-            output::render_diff(
+            output::render_diff_with_extra(
                 &diff,
                 &update.templates.input,
                 &update.templates.output,
                 update.max_ranges_per_file,
+                &vars,
             )
             .await
             .context("failed to render update script")?
