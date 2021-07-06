@@ -254,11 +254,13 @@ struct ReplaceModeVariables<'a, T> {
     params: &'a Params<T>,
     lpm_table: &'a str,
     lpm_table_constructor: &'a str,
+    proto: &'a str,
 }
 
 #[derive(Debug, Serialize)]
 struct UpdateModeVariables<'a> {
     lpm_table: &'a str,
+    proto: &'a str,
 }
 
 async fn run<'changes, 'ranges: 'changes, T>(
@@ -317,6 +319,7 @@ where
                 params: &estimated_params,
                 lpm_table: &table,
                 lpm_table_constructor: &lua_functions.lpm_table_constructor,
+                proto: proto,
             };
             let mut replace = config.replace.clone();
             replace.templates.output = replace_vars(&config.replace.templates.output, proto, kind);
@@ -339,7 +342,10 @@ where
                 remove: remove.into_iter().collect(),
             };
             let diff = make_diff(changes);
-            let vars = UpdateModeVariables { lpm_table: &table };
+            let vars = UpdateModeVariables {
+                lpm_table: &table,
+                proto: proto,
+            };
             let mut update = config.update.clone();
             update.templates.output = replace_vars(&config.update.templates.output, proto, kind);
             output::render_diff_with_extra(
