@@ -172,6 +172,8 @@ These are collections of `entry` elements of the respective protocol, each conta
 * `class`: the class associated to the range, also taken from Drib's configuration.
 * `range`: the IP range itself.
 
+The following variables are also available for `replace` and `update` script templates: `script_index`, an integer indicating which script is being rendered (starting at `0`); `is_first_script` and `is_last_script`, boolean values indicating, respectively, whether the script is the first and/or last to be rendered; and `proto`, the name of the protocol for the current script (either `"ipv4"` or `"ipv6"`).
+
 For the LPM parameters script template, the `lpm_table_constructor` and `lpm_get_params_function` variables defined in the configuration file will be available, along with the `lpm_table` variable, whose contents will be derived from the `table_format` setting in the `lpm` configuration section.
 
 Note that the LPM parameters script template is the same for IPv4 and IPv6, and will be rendered twice, once for each protocol version.
