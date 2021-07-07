@@ -7,9 +7,7 @@ use std::path::Path;
 use lazy_static::lazy_static;
 use regex::Regex;
 use serde::Serialize;
-use tokio::io;
 
-use drib::aggregate::AggregateLoadError;
 use ipnet::{Ipv4Net, Ipv6Net};
 use serde::de::DeserializeOwned;
 
@@ -103,22 +101,23 @@ fn lpm6_add_tables(net: &Ipv6Net, prefixes: &mut HashSet<Ipv6Net>) -> usize {
     ret
 }
 
+#[derive(Debug)]
 pub struct CurrentParams<T>(pub Vec<Params<T>>);
 
 pub async fn read<T>(
     socket: impl AsRef<Path>,
     script: impl AsRef<Path>,
-) -> Result<CurrentParams<T>, anyhow::Error> {
+) -> Result<CurrentParams<T>, Error> {
     let res = dyncfg::send_config_script(&socket, &script).await?;
     let params = parse_params(&res)?;
     Ok(params)
 }
 
-fn parse_params<T>(s: &str) -> Result<CurrentParams<T>, ParseIntError> {
+fn parse_params<T>(s: &str) -> Result<CurrentParams<T>, ParseError> {
     Ok(CurrentParams(parse_lines(s)?))
 }
 
-fn parse_lines<T>(s: &str) -> Result<Vec<Params<T>>, ParseIntError> {
+fn parse_lines<T>(s: &str) -> Result<Vec<Params<T>>, ParseError> {
     lazy_static! {
         static ref RE: Regex = Regex::new(r#"^\s*(\d+):\s*(\d+),\s*(\d+)\s*$"#).unwrap();
     }
@@ -143,24 +142,32 @@ fn parse_lines<T>(s: &str) -> Result<Vec<Params<T>>, ParseIntError> {
                 .as_str()
                 .parse()?;
             v.push((id, p1, p2));
+            continue;
         }
+        if line.trim().is_empty() {
+            continue;
+        }
+        return Err(ParseError::Line(line.to_owned()));
     }
 
+    if v.is_empty() {
+        return Err(ParseError::Empty);
+    }
     v.sort_by_key(|(id, _, _)| *id);
     Ok(v.iter().map(|(_, nr, nt)| Params::new(*nr, *nt)).collect())
 }
 
 #[derive(Debug)]
 pub enum Error {
-    Io(io::Error),
-    Load(AggregateLoadError),
+    Dyncfg(dyncfg::Error),
+    Parse(ParseError),
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Error::Io(e) => write!(f, "i/o error: {}", e),
-            Error::Load(e) => write!(f, "load aggregate error: {}", e),
+            Error::Dyncfg(e) => write!(f, "dyncfg error: {}", e),
+            Error::Parse(e) => write!(f, "parse error: {}", e),
         }
     }
 }
@@ -168,21 +175,54 @@ impl fmt::Display for Error {
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Error::Io(e) => Some(e),
-            Error::Load(e) => Some(e),
+            Error::Dyncfg(e) => Some(e),
+            Error::Parse(e) => Some(e),
         }
     }
 }
 
-impl From<io::Error> for Error {
-    fn from(e: io::Error) -> Error {
-        Error::Io(e)
+impl From<dyncfg::Error> for Error {
+    fn from(e: dyncfg::Error) -> Error {
+        Error::Dyncfg(e)
     }
 }
 
-impl From<AggregateLoadError> for Error {
-    fn from(e: AggregateLoadError) -> Error {
-        Error::Load(e)
+impl From<ParseError> for Error {
+    fn from(e: ParseError) -> Error {
+        Error::Parse(e)
+    }
+}
+
+#[derive(Debug)]
+pub enum ParseError {
+    Empty,
+    Line(String),
+    ParseInt(ParseIntError),
+}
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ParseError::Empty => write!(f, "dyncfg returned an empty response"),
+            ParseError::Line(s) => write!(f, "dyncfg returned an unexpected line: {}", s),
+            ParseError::ParseInt(e) => write!(f, "failed to parse int in dyncfg response: {}", e),
+        }
+    }
+}
+
+impl std::error::Error for ParseError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            ParseError::Empty => None,
+            ParseError::Line(_) => None,
+            ParseError::ParseInt(e) => Some(e),
+        }
+    }
+}
+
+impl From<ParseIntError> for ParseError {
+    fn from(e: ParseIntError) -> ParseError {
+        ParseError::ParseInt(e)
     }
 }
 
@@ -193,10 +233,10 @@ mod tests {
     #[test]
     fn test_parse_lines() {
         let lines = "";
-        assert!(parse_lines::<()>(lines).unwrap().is_empty());
+        assert!(parse_lines::<()>(lines).is_err());
 
         let lines = "foo";
-        assert!(parse_lines::<()>(lines).unwrap().is_empty());
+        assert!(parse_lines::<()>(lines).is_err());
 
         let lines = "99:101,102";
         assert_eq!(

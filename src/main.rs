@@ -1,5 +1,6 @@
 use std::cmp::Ord;
 use std::collections::BTreeSet;
+use std::fmt::Debug;
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
@@ -274,7 +275,7 @@ async fn run<'changes, 'ranges: 'changes, T>(
     make_diff: impl Fn(Changes<'changes, T>) -> Diff<'changes>,
 ) -> Result<(), anyhow::Error>
 where
-    T: Ord + Serialize + Copy,
+    T: Ord + Serialize + Copy + Debug,
 {
     let table = replace_vars(&config.lpm.table_format, proto, kind);
     let vars = ParametersScriptVariables {
@@ -303,6 +304,9 @@ where
 
     let set = new_ranges.iter().map(|e| e.range).collect();
     let estimated_params = estimate(&set);
+
+    debug!("current parameters: {:?}", current_params);
+    debug!("estimated parameters: {:?}", estimated_params);
 
     let scripts = match run_mode(&current_params, &estimated_params) {
         Mode::Replace => {
@@ -334,7 +338,10 @@ where
             .context("failed to render replacement script")?
         }
         Mode::Update => {
-            info!("updating table {}", table,);
+            info!(
+                "updating table {} with parameters {}",
+                table, estimated_params,
+            );
             let insert = new_ranges - old_ranges;
             let remove = old_ranges - new_ranges;
             let changes = Changes {
