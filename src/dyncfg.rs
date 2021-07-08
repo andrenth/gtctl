@@ -124,7 +124,6 @@ impl std::error::Error for SizeError {
 mod tests {
     use tempdir::TempDir;
     use tokio::net::UnixListener;
-    use tokio::stream::StreamExt;
     use tokio::sync::oneshot;
 
     use super::*;
@@ -159,10 +158,10 @@ mod tests {
     }
 
     async fn echo_server(path: impl AsRef<Path>, ready: oneshot::Sender<()>) {
-        let mut lis = UnixListener::bind(&path).expect("bind failed");
+        let lis = UnixListener::bind(&path).expect("bind failed");
         ready.send(()).expect("send ready failed");
-        while let Some(stream) = lis.next().await {
-            let mut stream = stream.expect("stream error");
+        loop {
+            let (mut stream, _addr) = lis.accept().await.expect("accept failed");
             tokio::spawn(async move {
                 let req_size = stream.read_u16().await.expect("read u16 failed");
                 let packet = create_packet(&mut stream, req_size)

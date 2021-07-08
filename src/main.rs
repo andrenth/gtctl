@@ -10,12 +10,10 @@ use drib::aggregate::{self, Entry};
 use drib::config::Templates;
 use drib::net::Net;
 use drib::output::{self, Bootstrap, Changes, Diff};
-use futures::stream;
 use ipnet::{Ipv4Net, Ipv6Net};
 use log::{debug, info, warn, Level};
 use serde::Serialize;
 use tokio::signal::unix::{signal, SignalKind};
-use tokio::stream::StreamExt;
 use tokio::{
     fs::{self, File},
     io::{self, AsyncBufReadExt, BufReader},
@@ -62,7 +60,7 @@ struct Dyncfg {
 #[clap(group = ArgGroup::new("estimate").required(true).multiple(true))]
 struct Estimate {
     #[clap(
-        short = "4",
+        short = '4',
         long,
         name = "IPV4-PREFIXES",
         parse(from_os_str),
@@ -70,7 +68,7 @@ struct Estimate {
     )]
     ipv4_prefixes: Option<PathBuf>,
     #[clap(
-        short = "6",
+        short = '6',
         long,
         name = "IPV6-PREFIXES",
         parse(from_os_str),
@@ -122,27 +120,33 @@ async fn main() -> Result<(), anyhow::Error> {
 }
 
 async fn ignore_signals() -> Result<(), io::Error> {
-    let mut signals = stream::select_all(vec![
-        signal(SignalKind::alarm())?,
-        signal(SignalKind::child())?,
-        signal(SignalKind::hangup())?,
-        signal(SignalKind::interrupt())?,
-        signal(SignalKind::io())?,
-        signal(SignalKind::pipe())?,
-        signal(SignalKind::quit())?,
-        signal(SignalKind::terminate())?,
-        signal(SignalKind::user_defined1())?,
-        signal(SignalKind::user_defined2())?,
-        signal(SignalKind::window_change())?,
-    ]);
+    let mut alarm = signal(SignalKind::alarm())?;
+    let mut child = signal(SignalKind::child())?;
+    let mut hup = signal(SignalKind::hangup())?;
+    let mut int = signal(SignalKind::interrupt())?;
+    let mut io = signal(SignalKind::io())?;
+    let mut pipe = signal(SignalKind::pipe())?;
+    let mut quit = signal(SignalKind::quit())?;
+    let mut term = signal(SignalKind::terminate())?;
+    let mut usr1 = signal(SignalKind::user_defined1())?;
+    let mut usr2 = signal(SignalKind::user_defined2())?;
+    let mut winch = signal(SignalKind::window_change())?;
 
-    tokio::spawn(async move {
-        while let Some(()) = signals.next().await {
-            info!("got signal");
-        }
-    });
-
-    Ok(())
+    loop {
+        tokio::select! {
+            Some(()) = alarm.recv() => info!("got sigalrm"),
+            Some(()) = child.recv() => info!("got sigchld"),
+            Some(()) = hup.recv() => info!("got sighup"),
+            Some(()) = int.recv() => info!("got sigint"),
+            Some(()) = io.recv() => info!("got sigio"),
+            Some(()) = pipe.recv() => info!("got sigpipe"),
+            Some(()) = quit.recv() => info!("got sigquit"),
+            Some(()) = term.recv() => info!("got sigterm"),
+            Some(()) = usr1.recv() => info!("got sigusr1"),
+            Some(()) = usr2.recv() => info!("got sigusr2"),
+            Some(()) = winch.recv() => info!("got sigwinch"),
+        };
+    }
 }
 
 fn load_config(path: impl AsRef<Path>) -> Result<Config, anyhow::Error> {
