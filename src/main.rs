@@ -141,21 +141,25 @@ async fn ignore_signals() -> Result<(), io::Error> {
     let mut usr2 = signal(SignalKind::user_defined2())?;
     let mut winch = signal(SignalKind::window_change())?;
 
-    loop {
-        tokio::select! {
-            Some(()) = alarm.recv() => info!("got sigalrm"),
-            Some(()) = child.recv() => info!("got sigchld"),
-            Some(()) = hup.recv() => info!("got sighup"),
-            Some(()) = int.recv() => info!("got sigint"),
-            Some(()) = io.recv() => info!("got sigio"),
-            Some(()) = pipe.recv() => info!("got sigpipe"),
-            Some(()) = quit.recv() => info!("got sigquit"),
-            Some(()) = term.recv() => info!("got sigterm"),
-            Some(()) = usr1.recv() => info!("got sigusr1"),
-            Some(()) = usr2.recv() => info!("got sigusr2"),
-            Some(()) = winch.recv() => info!("got sigwinch"),
-        };
-    }
+    tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                Some(()) = alarm.recv() => info!("got sigalrm"),
+                Some(()) = child.recv() => info!("got sigchld"),
+                Some(()) = hup.recv() => info!("got sighup"),
+                Some(()) = int.recv() => info!("got sigint"),
+                Some(()) = io.recv() => info!("got sigio"),
+                Some(()) = pipe.recv() => info!("got sigpipe"),
+                Some(()) = quit.recv() => info!("got sigquit"),
+                Some(()) = term.recv() => info!("got sigterm"),
+                Some(()) = usr1.recv() => info!("got sigusr1"),
+                Some(()) = usr2.recv() => info!("got sigusr2"),
+                Some(()) = winch.recv() => info!("got sigwinch"),
+            };
+        }
+    });
+
+    Ok(())
 }
 
 fn load_config(path: impl AsRef<Path>) -> Result<Config, anyhow::Error> {
