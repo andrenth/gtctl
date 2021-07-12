@@ -392,6 +392,9 @@ where
             fs::remove_file(script).await?;
         }
     }
+    if config.remove_rendered_scripts {
+        fs::remove_file(script).await?;
+    }
 
     Ok(())
 }
