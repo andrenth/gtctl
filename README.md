@@ -85,6 +85,13 @@ The directory where gtctl stores Drib aggregates across executions, as well as r
 
 A boolean value that indicates whether the policy scripts generated in `state_dir` are to be removed once they are submitted to Grantor via dynamic configuration.
 
+#### `estimate`
+
+The `estimate` sections defines settings for execution in estimate mode.
+
+* `rules_scaling_factor`: a multiplier for the estimated number of rules; defaults to `1`.
+* `tbl8s_scaling_factor`: a multiplier for the estimated number of tbl8s; defaults to `1`.
+
 #### `replace`
 
 This section defines parameters for the generation of policy scripts that replace the current policy.

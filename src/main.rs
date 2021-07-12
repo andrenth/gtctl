@@ -20,7 +20,7 @@ use tokio::{
 };
 
 use gtctl::{
-    config::{Config, LuaFunctions},
+    config::{Config, EstimateConfig, LuaFunctions},
     dyncfg,
     params::{self, CurrentParams, Params},
     util::safe_write,
@@ -75,6 +75,14 @@ struct Estimate {
         group = "estimate"
     )]
     ipv6_prefixes: Option<PathBuf>,
+    #[clap(
+        short,
+        long,
+        name = "FILE",
+        default_value = "/etc/gtctl/gtctl.conf",
+        parse(from_os_str)
+    )]
+    config: PathBuf,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -103,14 +111,15 @@ async fn main() -> Result<(), anyhow::Error> {
             dyn_cfg(&flags.aggregate, &config).await?;
         }
         Cmd::Estimate(flags) => {
+            let config = load_config(&flags.config)?;
             if let Some(path) = flags.ipv4_prefixes {
                 let prefixes: BTreeSet<Ipv4Net> = load_prefixes(&path).await?;
-                let params = params::estimate_ipv4(&prefixes);
+                let params = params::estimate_ipv4(&prefixes, &config.estimate);
                 println!("ipv4: {}", params);
             }
             if let Some(path) = flags.ipv6_prefixes {
                 let prefixes: BTreeSet<Ipv6Net> = load_prefixes(&path).await?;
-                let params = params::estimate_ipv6(&prefixes);
+                let params = params::estimate_ipv6(&prefixes, &config.estimate);
                 println!("ipv6: {}", params);
             }
         }
@@ -275,7 +284,7 @@ async fn run<'changes, 'ranges: 'changes, T>(
     kind: &Option<String>,
     new_ranges: &'ranges BTreeSet<&Entry<T>>,
     old_ranges: &'ranges BTreeSet<&Entry<T>>,
-    estimate: impl Fn(&BTreeSet<T>) -> Params<T>,
+    estimate: impl Fn(&BTreeSet<T>, &EstimateConfig) -> Params<T>,
     make_diff: impl Fn(Changes<'changes, T>) -> Diff<'changes>,
 ) -> Result<(), anyhow::Error>
 where
@@ -307,7 +316,7 @@ where
         })?;
 
     let set = new_ranges.iter().map(|e| e.range).collect();
-    let estimated_params = estimate(&set);
+    let estimated_params = estimate(&set, &config.estimate);
 
     debug!("current parameters: {:?}", current_params);
     debug!("estimated parameters: {:?}", estimated_params);

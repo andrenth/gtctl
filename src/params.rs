@@ -1,3 +1,4 @@
+use std::cmp::max;
 use std::collections::{BTreeSet, HashSet};
 use std::fmt;
 use std::marker::PhantomData;
@@ -11,6 +12,7 @@ use serde::Serialize;
 use ipnet::{Ipv4Net, Ipv6Net};
 use serde::de::DeserializeOwned;
 
+use crate::config::EstimateConfig;
 use crate::dyncfg;
 
 #[derive(Debug, Eq, PartialEq, Serialize)]
@@ -36,15 +38,15 @@ impl<T> fmt::Display for Params<T> {
     }
 }
 
-pub fn estimate_ipv4(nets: &BTreeSet<Ipv4Net>) -> Params<Ipv4Net> {
-    estimate_params(nets, lpm_add_tables)
+pub fn estimate_ipv4(nets: &BTreeSet<Ipv4Net>, config: &EstimateConfig) -> Params<Ipv4Net> {
+    estimate_params(nets, config, lpm_add_tables)
 }
 
-pub fn estimate_ipv6(nets: &BTreeSet<Ipv6Net>) -> Params<Ipv6Net> {
-    estimate_params(nets, lpm6_add_tables)
+pub fn estimate_ipv6(nets: &BTreeSet<Ipv6Net>, config: &EstimateConfig) -> Params<Ipv6Net> {
+    estimate_params(nets, config, lpm6_add_tables)
 }
 
-fn estimate_params<T, F>(nets: &BTreeSet<T>, f: F) -> Params<T>
+fn estimate_params<T, F>(nets: &BTreeSet<T>, config: &EstimateConfig, f: F) -> Params<T>
 where
     T: Ord + DeserializeOwned,
     F: Fn(&T, &mut HashSet<T>) -> usize,
@@ -57,6 +59,9 @@ where
         num_rules += 1;
         num_tbl8s += f(&net, &mut prefixes);
     }
+
+    num_rules = max(1, config.rules_scaling_factor * num_rules);
+    num_tbl8s = max(1, config.tbl8s_scaling_factor * num_tbl8s);
 
     Params::new(num_rules, num_tbl8s)
 }
