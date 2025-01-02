@@ -408,12 +408,6 @@ fn run_mode<T>(cur: &CurrentParams<T>, est: &Params<T>) -> Mode {
     Mode::Update
 }
 
-#[derive(Debug, Serialize)]
-struct ParamsWrapper<'a> {
-    ipv4: &'a Params<Ipv4Net>,
-    ipv6: &'a Params<Ipv6Net>,
-}
-
 async fn render_parameters_script<'a>(
     config: &Templates,
     proto: &str,
