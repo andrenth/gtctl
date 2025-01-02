@@ -1,6 +1,6 @@
 [package]
 name = "gtctl"
-version = "1.0.0"
+version = "1.0.1"
 authors = ["Andre Nathan <andre@digirati.com.br>"]
 edition = "2018"
 
